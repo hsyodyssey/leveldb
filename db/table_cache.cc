@@ -44,12 +44,16 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
   Slice key(buf, sizeof(buf));
+  // 从当前的LRU中查找这个File对应的Handle存不存在。
   *handle = cache_->Lookup(key);
   if (*handle == nullptr) {
+    // 如果当前的Cache中不存在这个Handle，那么就访问该文件
     std::string fname = TableFileName(dbname_, file_number);
     RandomAccessFile* file = nullptr;
     Table* table = nullptr;
+    // 调用NewRandomAccessFile函数来访问该文件
     s = env_->NewRandomAccessFile(fname, &file);
+
     if (!s.ok()) {
       std::string old_fname = SSTTableFileName(dbname_, file_number);
       if (env_->NewRandomAccessFile(old_fname, &file).ok()) {
@@ -69,6 +73,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       TableAndFile* tf = new TableAndFile;
       tf->file = file;
       tf->table = table;
+      // 向TableCache LRU中插入该文件的Handle
       *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
     }
   }
@@ -102,9 +107,11 @@ Status TableCache::Get(const ReadOptions& options, uint64_t file_number,
                        void (*handle_result)(void*, const Slice&,
                                              const Slice&)) {
   Cache::Handle* handle = nullptr;
+  // 首先去查找这个文件是否存在，如果文件存在，那么在这个过程中会将File的Handle 添加到LRU Cache中。
   Status s = FindTable(file_number, file_size, &handle);
   if (s.ok()) {
     Table* t = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
+    // 使用内部查询查询目标key是否在对应的文件中，t是一个Table类型
     s = t->InternalGet(options, k, arg, handle_result);
     cache_->Release(handle);
   }

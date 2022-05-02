@@ -537,9 +537,11 @@ class PosixEnv : public Env {
     return Status::OK();
   }
 
+  // env函数在POSIX上的实现
   Status NewRandomAccessFile(const std::string& filename,
                              RandomAccessFile** result) override {
     *result = nullptr;
+    // 打开文件，调用的全局函数
     int fd = ::open(filename.c_str(), O_RDONLY | kOpenBaseFlags);
     if (fd < 0) {
       return PosixError(filename, errno);
